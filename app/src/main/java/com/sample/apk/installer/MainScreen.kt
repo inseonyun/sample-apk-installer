@@ -2,7 +2,9 @@ package com.sample.apk.installer
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -31,6 +33,21 @@ fun MainScreen() {
     ) {
         Button(
             onClick = {
+                val inputStream = context.resources.openRawResource(R.raw.sample_app_1_0)
+                val file = File(context.cacheDir, "sample_1_0.apk")
+                val isSuccess = getApkFileFromRaw(inputStream, file)
+
+                if (isSuccess) {
+                    getPackageFromApkFile(context, file)?.let {
+                        try {
+                            Log.i("CheckInstallation", "PackageName: $it")
+                            context.packageManager.getPackageInfo(it, PackageManager.GET_META_DATA)
+                            Toast.makeText(context, "설치되어있음", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "설치되어있지 않음", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
             },
         ) {
             Text("설치 여부 확인")
@@ -57,6 +74,18 @@ fun MainScreen() {
         ) {
             Text("업데이트")
         }
+    }
+}
+
+private fun getPackageFromApkFile(context: Context, file: File): String? {
+    try {
+        val packageManager = context.packageManager
+        val packageInformation = packageManager.getPackageArchiveInfo(file.absolutePath, PackageManager.GET_META_DATA)
+
+        return packageInformation?.packageName
+    } catch (e: Exception) {
+        Log.e("GetPackageFromApk", "Error: ${e.message}")
+        return null
     }
 }
 
