@@ -120,6 +120,7 @@ private fun installApk(
             setDataAndType(apkURI, "application/vnd.android.package-archive")
 
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         startActivity.invoke(intent)
     } catch (e: Exception) {
