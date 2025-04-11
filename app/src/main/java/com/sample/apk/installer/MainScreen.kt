@@ -1,8 +1,12 @@
 package com.sample.apk.installer
 
+import android.annotation.SuppressLint
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.LocalActivity
@@ -18,6 +22,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.FileProvider
 import com.sample.apk.installer.ui.theme.ApkInstallerTheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -58,7 +65,12 @@ fun MainScreen() {
                 val file = File(context.cacheDir, "sample_1_0.apk")
                 val isSuccess = getApkFileFromRaw(inputStream, file)
 
-                if (isSuccess) installApk(context, file) { activity?.startActivity(it) }
+                if (isSuccess) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        installApkWithPackageInstaller(context, file)
+                    }
+                }
+//                if (isSuccess) installApk(context, file) { activity?.startActivity(it) }
             },
         ) {
             Text("이전 버전 설치")
@@ -69,7 +81,12 @@ fun MainScreen() {
                 val file = File(context.cacheDir, "sample_1_1.apk")
                 val isSuccess = getApkFileFromRaw(inputStream, file)
 
-                if (isSuccess) installApk(context, file) { activity?.startActivity(it) }
+                if (isSuccess) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        installApkWithPackageInstaller(context, file)
+                    }
+                }
+//                if (isSuccess) installApk(context, file) { activity?.startActivity(it) }
             },
         ) {
             Text("업데이트")
@@ -127,6 +144,47 @@ private fun installApk(
         Log.e("InstallApk", "Error: ${e.message}")
     }
 }
+
+@SuppressLint("ServiceCast")
+fun installApkWithPackageInstaller(context: Context, apkFile: File) {
+    val packageInstaller = context.packageManager.packageInstaller
+
+    val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+    val sessionId = packageInstaller.createSession(params)
+    val session = packageInstaller.openSession(sessionId)
+
+    apkFile.inputStream().use { input ->
+        session.openWrite("app_session", 0, -1).use { output ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            var totalBytes = 0L
+            var length: Int
+
+            while (input.read(buffer).also { length = it } != -1) {
+                output.write(buffer, 0, length)
+                totalBytes += length
+                // TODO: Update Notification progress here using totalBytes and apkFile.length()
+            }
+            session.fsync(output)
+        }
+    }
+
+    val intent = Intent(context, ApkInstallReceiver::class.java)
+    val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+    } else {
+        PendingIntent.FLAG_UPDATE_CURRENT
+    }
+    val pendingIntent = PendingIntent.getBroadcast(
+        context,
+        sessionId,
+        intent,
+        flags,
+    )
+
+    session.commit(pendingIntent.intentSender)
+    session.close()
+}
+
 
 @Composable
 @Preview
